@@ -1,0 +1,32 @@
+{
+  "name": "ugm-poc",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "buildCsvParser": "esbuild src/csv-parser.ts --bundle --minify --sourcemap --platform=node --target=es2020 --outfile=dist/csv-parser/index.js",
+    "buildCnsMpo": "esbuild src/cns-mpo.ts --bundle --minify --sourcemap --platform=node --target=es2020 --outfile=dist/cns-mpo/index.js",
+    "prebuild": "rm -rf dist",
+    "build": "npm run buildCsvParser && npm run buildCnsMpo",
+    "postbuild": "cd dist && zip -rj csv-parser.zip csv-parser/index.js* && zip -rj cns-mpo.zip cns-mpo/index.js*"
+  },
+  "author": "Laszlo Antal",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.103",
+    "@types/node": "^18.7.18",
+    "esbuild": "^0.15.7"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudwatch": "3.169.0",
+    "@aws-sdk/client-dynamodb": "3.169.0",
+    "@aws-sdk/client-s3": "3.169.0",
+    "@aws-sdk/client-sqs": "3.169.0",
+    "@aws-sdk/util-dynamodb": "3.169.0",
+    "@types/lodash.chunk": "^4.2.7",
+    "axios": "0.27.2",
+    "axios-retry": "3.3.1",
+    "lodash.chunk": "^4.2.0",
+    "p-limit": "4.0.0"
+  }
+}
