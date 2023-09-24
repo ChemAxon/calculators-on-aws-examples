@@ -1,32 +1,39 @@
 {
-  "name": "ugm-poc",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "buildCsvParser": "esbuild src/csv-parser.ts --bundle --minify --sourcemap --platform=node --target=es2020 --outfile=dist/csv-parser/index.js",
-    "buildCnsMpo": "esbuild src/cns-mpo.ts --bundle --minify --sourcemap --platform=node --target=es2020 --outfile=dist/cns-mpo/index.js",
-    "prebuild": "rm -rf dist",
-    "build": "npm run buildCsvParser && npm run buildCnsMpo",
-    "postbuild": "cd dist && zip -rj csv-parser.zip csv-parser/index.js* && zip -rj cns-mpo.zip cns-mpo/index.js*"
-  },
-  "author": "Laszlo Antal",
-  "license": "ISC",
-  "devDependencies": {
-    "@types/aws-lambda": "^8.10.103",
-    "@types/node": "^18.7.18",
-    "esbuild": "^0.15.7"
-  },
-  "dependencies": {
-    "@aws-sdk/client-cloudwatch": "3.169.0",
-    "@aws-sdk/client-dynamodb": "3.169.0",
-    "@aws-sdk/client-s3": "3.169.0",
-    "@aws-sdk/client-sqs": "3.169.0",
-    "@aws-sdk/util-dynamodb": "3.169.0",
-    "@types/lodash.chunk": "^4.2.7",
-    "axios": "0.27.2",
-    "axios-retry": "3.3.1",
-    "lodash.chunk": "^4.2.0",
-    "p-limit": "4.0.0"
-  }
+    "name": "calculators-on-aws-examples",
+    "version": "1.0.0",
+    "bin": {
+        "chemaxon-calculators-example": "src/index.ts"
+    },
+    "scripts": {
+        "cdk": "cdk"
+    },
+    "devDependencies": {
+        "@types/aws-lambda": "8.10.103",
+        "@types/node": "20.5.9",
+        "aws-cdk": "2.96.2",
+        "ts-node": "10.9.1",
+        "typescript": "5.2.2",
+        "@typescript-eslint/eslint-plugin": "5.16.0",
+        "@typescript-eslint/parser": "5.16.0",
+        "esbuild": "0.14.43",
+        "eslint": "8.12.0",
+        "eslint-config-airbnb-base": "15.0.0",
+        "eslint-config-airbnb-typescript": "16.1.4",
+        "eslint-plugin-import": "2.25.4"
+    },
+    "dependencies": {
+        "aws-cdk-lib": "2.96.2",
+        "constructs": "10.0.0",
+        "source-map-support": "0.5.21",
+        "@aws-sdk/client-cloudwatch": "3.414.0",
+        "@aws-sdk/client-dynamodb": "3.414.0",
+        "@aws-sdk/client-s3": "3.414.0",
+        "@aws-sdk/client-sqs": "3.414.0",
+        "@aws-sdk/util-dynamodb": "3.414.0",
+        "@types/lodash.chunk": "4.2.7",
+        "axios": "0.27.2",
+        "axios-retry": "3.3.1",
+        "lodash": "4.17.21",
+        "p-limit": "4.0.0"
+    }
 }

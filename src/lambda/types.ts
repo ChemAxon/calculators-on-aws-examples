@@ -1,3 +1,8 @@
+export type RawCsvRecord = {
+  _1: string,
+  _2: string
+}
+
 export type StructureRecord = {
     id: string,
     mol: string

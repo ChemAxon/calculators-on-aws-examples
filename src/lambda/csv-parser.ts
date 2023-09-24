@@ -1,20 +1,21 @@
-import { SendMessageBatchCommand, SendMessageBatchRequestEntry, SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
-import { Context, SQSEvent } from 'aws-lambda';
+import { SendMessageBatchCommand, SendMessageBatchRequestEntry, SQSClient } from '@aws-sdk/client-sqs';
 import { S3Client, ScanRange, HeadObjectCommand, SelectObjectContentCommand } from '@aws-sdk/client-s3';
 import { RawCsvRecord, StructureRecord } from './types';
-import chunk from "lodash.chunk";
+import { chunk } from 'lodash';
 
 const JSON_RECORD_DELIMITER = '|';
 const DEFAULT_CHUNK_SIZE = 1000;
 const DEFAULT_GROUP_COUNT = 1;
+const MAX_BATCH_SIZE_CXN_API = 25;
+const MAX_BATCH_SIZE_SQS_FIFO = 10;
 
-const sqs = new SQSClient({});
+const sqs = new SQSClient();
 
 const bucket = process.env.BUCKET as string;
 const fileName = process.env.FILE_NAME as string;
 
 const parseRecordsFromCsv = async (bucket: string, file: string, range: ScanRange): Promise<StructureRecord[]> => {
-    const s3 = new S3Client({});
+    const s3 = new S3Client();
     const result = await s3.send(new SelectObjectContentCommand({
         Bucket: bucket,
         Key: file,
@@ -34,16 +35,15 @@ const parseRecordsFromCsv = async (bucket: string, file: string, range: ScanRang
 
     for await (const eventStream of result.Payload) {
         if (typeof eventStream.Records !== 'undefined') {
-            out = out.concat(textDecoder.decode(eventStream.Records?.Payload));
+            out = out.concat(textDecoder.decode(eventStream.Records?.Payload as ArrayBuffer));
         }
     }
 
-    const records: StructureRecord[] = out
+    return out
         .split(JSON_RECORD_DELIMITER)
         .filter(r => r !== '')
         .map(r => JSON.parse(r) as RawCsvRecord)
         .map(r => ({ id: r._2, mol: r._1 }));
-    return records;
 }
 
 const sendRecordsToQueue = async (records: StructureRecord[][], groupId: number) => {
@@ -54,7 +54,7 @@ const sendRecordsToQueue = async (records: StructureRecord[][], groupId: number)
     }));
 
     const response = await sqs.send(new SendMessageBatchCommand({
-        QueueUrl: 'https://sqs.eu-west-1.amazonaws.com/104204224647/CxnMoleculeRecords.fifo',
+        QueueUrl: process.env.SQS_QUEUE_URL,
         Entries: entries
     }));
 
@@ -63,13 +63,13 @@ const sendRecordsToQueue = async (records: StructureRecord[][], groupId: number)
     }
 }
 
-export const handler = async (event: { chunkSize?: number, groupCount?: number, limit?: number }, context: Context): Promise<void> => {
+export const handler = async (event: { chunkSize?: number, groupCount?: number, limit?: number }): Promise<void> => {
     console.log(`Event: ${JSON.stringify(event, null, 2)}`);
 
     const chunkSize = typeof event.chunkSize === 'undefined' ? DEFAULT_CHUNK_SIZE : event.chunkSize;
     const groupCount = typeof event.groupCount === 'undefined' ? DEFAULT_GROUP_COUNT : event.groupCount;
 
-    const s3 = new S3Client({});
+    const s3 = new S3Client();
     const out = await s3.send(new HeadObjectCommand({
         Bucket: bucket,
         Key: fileName
@@ -89,13 +89,13 @@ export const handler = async (event: { chunkSize?: number, groupCount?: number, 
 
         const records: StructureRecord[] = await parseRecordsFromCsv(bucket, fileName, range);
         numberOfParsedRecords += records.length;
-        console.log('Parsed records: ' + records.length + ' / ' + numberOfParsedRecords);
+        console.log('Parsed records: ' + records.length + ' | TOTAL: ' + numberOfParsedRecords);
 
-        const chunks = chunk(chunk(records, 25), 10);
+        const chunks = chunk(chunk(records, MAX_BATCH_SIZE_CXN_API), MAX_BATCH_SIZE_SQS_FIFO);
 
         let groupId = 0;
-        for (const c of chunks) {
-            await sendRecordsToQueue(c, groupId);
+        for (const chunk of chunks) {
+            await sendRecordsToQueue(chunk, groupId);
             groupId = groupId + 1 < groupCount ? groupId + 1 : 0
         }
 
