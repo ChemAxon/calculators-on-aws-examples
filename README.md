@@ -25,7 +25,7 @@ The project uses only some basic AWS resources (**S3**, **SQS**, **Lambda** and 
 
 All resources and their configurations can be deployed with the following commands:
 ````
-npm run install
+npm install
 npm run cdk deploy -- --parameters cxnApiKey=<API_KEY> --parameters bucketName=<BUCKET_NAME>
 ````
 

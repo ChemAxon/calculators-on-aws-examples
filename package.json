@@ -1,6 +1,6 @@
 {
     "name": "calculators-on-aws-examples",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "bin": {
         "chemaxon-calculators-example": "src/index.ts"
     },
@@ -10,30 +10,31 @@
     "devDependencies": {
         "@types/aws-lambda": "8.10.103",
         "@types/node": "20.5.9",
-        "aws-cdk": "2.96.2",
-        "ts-node": "10.9.1",
-        "typescript": "5.2.2",
         "@typescript-eslint/eslint-plugin": "5.16.0",
         "@typescript-eslint/parser": "5.16.0",
+        "aws-cdk": "2.96.2",
         "esbuild": "0.14.43",
         "eslint": "8.12.0",
         "eslint-config-airbnb-base": "15.0.0",
         "eslint-config-airbnb-typescript": "16.1.4",
-        "eslint-plugin-import": "2.25.4"
+        "eslint-plugin-import": "2.25.4",
+        "ts-node": "10.9.1",
+        "typescript": "5.2.2"
     },
     "dependencies": {
-        "aws-cdk-lib": "2.96.2",
-        "constructs": "10.0.0",
-        "source-map-support": "0.5.21",
         "@aws-sdk/client-cloudwatch": "3.414.0",
         "@aws-sdk/client-dynamodb": "3.414.0",
         "@aws-sdk/client-s3": "3.414.0",
+        "@aws-sdk/client-secrets-manager": "3.414.0",
         "@aws-sdk/client-sqs": "3.414.0",
         "@aws-sdk/util-dynamodb": "3.414.0",
         "@types/lodash.chunk": "4.2.7",
+        "aws-cdk-lib": "2.96.2",
         "axios": "0.27.2",
         "axios-retry": "3.3.1",
+        "constructs": "10.2.70",
         "lodash": "4.17.21",
-        "p-limit": "4.0.0"
+        "p-limit": "4.0.0",
+        "source-map-support": "0.5.21"
     }
 }

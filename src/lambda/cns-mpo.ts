@@ -1,9 +1,13 @@
 import { SQSEvent } from 'aws-lambda';
-import { BatchWriteItemCommand, DynamoDB, WriteRequest } from "@aws-sdk/client-dynamodb";
-import { marshall } from "@aws-sdk/util-dynamodb";
+import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
+import { BatchWriteItemCommand, DynamoDB, WriteRequest } from '@aws-sdk/client-dynamodb';
+import { marshall } from '@aws-sdk/util-dynamodb';
 import { DbRecord, StructureRecord } from './types';
 import axios from 'axios';
 import axiosRetry from 'axios-retry';
+
+const secretManager = new SecretsManagerClient();
+let cxnApiKey : string | undefined;
 
 const dynamodb = new DynamoDB();
 
@@ -32,7 +36,21 @@ const createDbRecord = (structureRecord: StructureRecord, response: any): DbReco
     return dbRecord;
 }
 
+const getApiKeyFromSecretManager = async (): Promise<string> => {
+    return secretManager
+        .send(new GetSecretValueCommand({SecretId: process.env.API_KEY_SECRET_NAME}))
+        .then((secret) => {
+            if (typeof secret.SecretString === 'undefined') {
+                throw new Error(`The API key secret is undefined, SecretId: ${process.env.API_KEY_SECRET_NAME}`)
+            }
+            return secret.SecretString;
+        })
+}
+
 const calculateCnsMpoScore = async (structureRecords: StructureRecord[]) => {
+    if (typeof cxnApiKey === 'undefined') {
+        cxnApiKey = await getApiKeyFromSecretManager();
+    }
 
     return axios.post('https://api.calculators.cxn.io/rest-v1/calculator/batch/calculate',
         {
@@ -41,9 +59,7 @@ const calculateCnsMpoScore = async (structureRecords: StructureRecord[]) => {
             structures: structureRecords.map(r => r.mol)
         },
         {
-            headers: {
-                'x-api-key': process.env.API_KEY as string
-            }
+            headers: { 'x-api-key': cxnApiKey },
         })
         .then(response => {
             const results = response.data.results;
@@ -69,7 +85,6 @@ const store = async (records: DbRecord[]): Promise<void> => {
         }
     })
 }
-
 
 export const handler = async (event: SQSEvent) => {
 
