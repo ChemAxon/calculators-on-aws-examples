@@ -29,7 +29,14 @@ npm install
 npm run cdk deploy -- --parameters cxnApiKey=<API_KEY> --parameters bucketName=<BUCKET_NAME>
 ````
 
-## Download molecules and upload to the S3 bucket
+## Cost of calculations
+- Subscribing to the service is **free of charge**. The cost is based on the number of calculation units consumed. Please check the [Pricing](https://docs.chemaxon.com/display/lts-lithium/calculators-aws-marketplace-pricing.md) page for further details.
+- The price of the CNS-MPO calculation is **7 units/structure** so the below test run on 100 structures costs **7 USD**.
+- There is some minimal cost of using the AWS resources ([AWS Pricing documentation](https://aws.amazon.com/pricing/)).
+
+**We recommend to delete the created resources after the test run finished: `npm run cdk destroy`**
+
+## Test
 **!! Please be careful and do not upload more than 100 structures for testing purposes to prevent an unexpected cost. !!**
 
 The following commands download molecular structures in SMILES format and upload the first **100 structures** to the created S3 bucket:
@@ -39,24 +46,9 @@ gzcat mcule_ultimate_express1_220828.smi.gz | head -n 100 >molecules.smiles
 aws s3 cp molecules.smiles s3://<BUCKET_NAME>/
 ````
 
-## Cost of calculations
-- Subscribing to the service is **free of charge**. The cost is based on the number of calculation units consumed. Please check the [Pricing](https://docs.chemaxon.com/display/lts-lithium/calculators-aws-marketplace-pricing.md) page for further details.
-- The price of the CNS-MPO calculation is **7 units/structure** so the below test run on 100 structures costs **7 USD**.
-- There is some minimal cost of using the AWS resources ([AWS Pricing documentation](https://aws.amazon.com/pricing/)).
-
-**We recommend to delete the created resources after the test run finished: `npm run cdk destroy`**
-
-## Test
-The Lambda function can be invoked to parse CSV records and send them to the SQS:
-````
-aws lambda invoke \
-    --function-name cxn-csv-parser \
-    --cli-binary-format raw-in-base64-out \
-    --payload '{ "groupCount": 1 }' \
-    csv-parser-response.json
-````
-
-The records from SQS are processed automatically and molecules can be searched based on the CNS MPO score:
+A Lambda function is triggered by the S3 upload event, parses the CSV records and sends them to an SQS.<br>
+The records from the SQS are processed automatically. The CNS-MPO scores of the molecules are calculated and stored by another Lambda function.<br>
+Finally, the molecules can be searched based on the CNS MPO score:
 ````
 aws dynamodb scan \
     --table-name CxnResults \

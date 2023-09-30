@@ -2,10 +2,10 @@ import { CfnParameter, Duration, RemovalPolicy, SecretValue, Stack, StackProps }
 import { Construct } from 'constructs';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
-import { Bucket } from 'aws-cdk-lib/aws-s3';
+import { Bucket, EventType } from 'aws-cdk-lib/aws-s3';
 import { AttributeType, Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
-import { SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
+import { S3EventSource, SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
 
 export class ChemaxonCalculatorsExampleStack extends Stack {
@@ -55,13 +55,15 @@ export class ChemaxonCalculatorsExampleStack extends Stack {
             entry: 'src/lambda/csv-parser.ts',
             runtime: Runtime.NODEJS_18_X,
             environment: {
-                BUCKET: bucket.bucketName,
-                FILE_NAME: 'molecules.smiles',
+                S3_CHUNK_SIZE: '1000',
+                S3_SIZE_LIMIT: '10000',
                 SQS_QUEUE_URL: queue.queueUrl,
+                SQS_GROUP_COUNT: '1',
             },
             memorySize: 512,
             timeout: Duration.minutes(15),
         });
+        csvParser.addEventSource(new S3EventSource(bucket, { events: [EventType.OBJECT_CREATED] }));
         bucket.grantRead(csvParser);
         queue.grantSendMessages(csvParser);
 
