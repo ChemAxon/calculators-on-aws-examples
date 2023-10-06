@@ -3,10 +3,12 @@ import { Construct } from 'constructs';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Runtime } from 'aws-cdk-lib/aws-lambda';
 import { Bucket, EventType } from 'aws-cdk-lib/aws-s3';
-import { AttributeType, Table } from 'aws-cdk-lib/aws-dynamodb';
+import { AttributeType, BillingMode, Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Queue } from 'aws-cdk-lib/aws-sqs';
 import { S3EventSource, SqsEventSource } from 'aws-cdk-lib/aws-lambda-event-sources';
 import { Secret } from 'aws-cdk-lib/aws-secretsmanager';
+
+const CXN_API_MAX_BATCH_SIZE = 25;
 
 export class ChemaxonCalculatorsExampleStack extends Stack {
     constructor(scope: Construct, id: string, props?: StackProps) {
@@ -17,7 +19,7 @@ export class ChemaxonCalculatorsExampleStack extends Stack {
             description: 'The S3 bucket name.',
         });
 
-        const cxnApiKey = new CfnParameter(this,  'cxnApiKey', {
+        const cxnApiKey = new CfnParameter(this, 'cxnApiKey', {
             type: 'String',
             noEcho: true,
             description: 'The API key for api.calculators.cxn.io calls.',
@@ -40,14 +42,17 @@ export class ChemaxonCalculatorsExampleStack extends Stack {
         const table = new Table(this, 'cxn-dynamodb-table', {
             tableName: 'CxnResults',
             partitionKey: { name: 'id', type: AttributeType.STRING },
+            billingMode: BillingMode.PAY_PER_REQUEST,
             removalPolicy: RemovalPolicy.DESTROY,
         });
 
+        const dlq = new Queue(this, 'cxn-dead-letter-queue', {
+            queueName: 'CxnDeadLetterQueue',
+        });
         const queue = new Queue(this, 'cxn-queue', {
-            queueName: 'CxnQueue.fifo',
-            fifo: true,
-            contentBasedDeduplication: true,
-            visibilityTimeout: Duration.minutes(5),
+            queueName: 'CxnQueue',
+            visibilityTimeout: Duration.seconds(10),
+            deadLetterQueue: { queue: dlq, maxReceiveCount: 1 },
         });
 
         const csvParser = new NodejsFunction(this, 'cxn-lambda-csv-parser', {
@@ -55,10 +60,8 @@ export class ChemaxonCalculatorsExampleStack extends Stack {
             entry: 'src/lambda/csv-parser.ts',
             runtime: Runtime.NODEJS_18_X,
             environment: {
-                S3_CHUNK_SIZE: '1000',
                 S3_SIZE_LIMIT: '10000',
                 SQS_QUEUE_URL: queue.queueUrl,
-                SQS_GROUP_COUNT: '1',
             },
             memorySize: 512,
             timeout: Duration.minutes(15),
@@ -75,9 +78,14 @@ export class ChemaxonCalculatorsExampleStack extends Stack {
                 API_KEY_SECRET_NAME: secret.secretName,
                 DB_TABLE: table.tableName,
             },
-            timeout: Duration.minutes(5),
+            timeout: Duration.seconds(10),
         });
-        cnsMpoCalculator.addEventSource(new SqsEventSource(queue, { batchSize: 1 }));
+        cnsMpoCalculator.addEventSource(new SqsEventSource(queue, {
+            batchSize: CXN_API_MAX_BATCH_SIZE,
+            maxBatchingWindow: Duration.seconds(5),
+            maxConcurrency: 10,
+            reportBatchItemFailures: true
+        }));
         secret.grantRead(cnsMpoCalculator);
         table.grantWriteData(cnsMpoCalculator);
     }

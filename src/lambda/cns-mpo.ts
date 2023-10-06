@@ -1,9 +1,9 @@
-import { SQSEvent } from 'aws-lambda';
+import { SQSEvent, SQSBatchResponse } from 'aws-lambda';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { BatchWriteItemCommand, DynamoDB, WriteRequest } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
-import { DbRecord, StructureRecord } from './types';
-import axios from 'axios';
+import { CnsMpoResponse, CnsMpoResult, DbRecord, StructureRecord } from './types';
+import axios, { AxiosResponse } from 'axios';
 import axiosRetry from 'axios-retry';
 
 const secretManager = new SecretsManagerClient();
@@ -25,15 +25,13 @@ axiosRetry(axios, {
     }
 })
 
-const createDbRecord = (structureRecord: StructureRecord, response: any): DbRecord => {
-    const dbRecord = {
+const createDbRecord = (structureRecord: StructureRecord, result: CnsMpoResult): DbRecord => {
+    return {
         id: structureRecord.id,
         mol: structureRecord.mol,
-        cns_mpo_score: response['cns-mpo'].score,
-        cns_mpo_props: {}
-    }
-    response['cns-mpo'].properties.forEach(p => dbRecord.cns_mpo_props[p.name] = {value: p.value, score: p.score});
-    return dbRecord;
+        cns_mpo_score: result["cns-mpo"].score,
+        cns_mpo_props: result["cns-mpo"].properties
+    };
 }
 
 const getApiKeyFromSecretManager = async (): Promise<string> => {
@@ -47,12 +45,13 @@ const getApiKeyFromSecretManager = async (): Promise<string> => {
         })
 }
 
-const calculateCnsMpoScore = async (structureRecords: StructureRecord[]) => {
+const calculateCnsMpoScore = async (structureRecords: StructureRecord[]): Promise<CnsMpoResponse> => {
     if (typeof cxnApiKey === 'undefined') {
         cxnApiKey = await getApiKeyFromSecretManager();
     }
 
-    return axios.post('https://api.calculators.cxn.io/rest-v1/calculator/batch/calculate',
+    return axios.post<CnsMpoResponse, AxiosResponse<CnsMpoResponse>>(
+        'https://api.calculators.cxn.io/rest-v1/calculator/batch/calculate',
         {
             calculations: { 'cns-mpo': {} },
             inputFormat: 'smiles',
@@ -62,10 +61,7 @@ const calculateCnsMpoScore = async (structureRecords: StructureRecord[]) => {
             headers: { 'x-api-key': cxnApiKey },
         })
         .then(response => {
-            const results = response.data.results;
-            return results.map(r => createDbRecord(structureRecords[results.indexOf(r)], r));
-        }).catch(err => {
-            throw new Error('Failed request - ' + JSON.stringify(err) + ' - ' + JSON.stringify(structureRecords));
+            return response.data;
         });
 }
 
@@ -86,18 +82,27 @@ const store = async (records: DbRecord[]): Promise<void> => {
     })
 }
 
-export const handler = async (event: SQSEvent) => {
-
-    if (event.Records.length !== 1) {
-        throw new Error(`SQSEvent record count [ ${event.Records.length} ] != 1`);
+export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
+    if (event.Records.length > 25) {
+        throw new Error(`SQSEvent record count [ ${event.Records.length} ] > 25`);
     }
 
-    const records: StructureRecord[] = JSON.parse(event.Records[0].body);
+    const structureRecords : StructureRecord[] = event.Records.map((record) => JSON.parse(record.body));
 
-    if (records.length > 25) {
-        throw new Error(`StructureRecord[] length [ ${records.length} ] > 25`);
-    }
+    const dbRecords : DbRecord[] = [];
+    const sqsBatchResponse : SQSBatchResponse = { batchItemFailures: [] }
 
-    await calculateCnsMpoScore(records).then(dbRecords => store(dbRecords as DbRecord[]));
-    console.log(`Processed records: ${records.length}`);
+    const cnsMpoResponse = await calculateCnsMpoScore(structureRecords);
+    cnsMpoResponse.results.forEach((result, index) => {
+        if (typeof result['cns-mpo'].error === 'undefined') {
+            dbRecords.push(createDbRecord(structureRecords[index], result));
+        } else {
+            console.error(JSON.stringify({ input: structureRecords[index], error: result['cns-mpo'].error }));
+            sqsBatchResponse.batchItemFailures.push({ itemIdentifier: event.Records[index].messageId });
+        }
+    });
+
+    await store(dbRecords);
+    console.log(`Processed records: ${structureRecords.length} | Failures: ${sqsBatchResponse.batchItemFailures.length}`);
+    return sqsBatchResponse;
 };
